@@ -1,0 +1,12 @@
+{
+  "name": "rsk-aa-typed-tx",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^2.0.2",
+    "hardhat": "^2.13.0"
+  },
+  "scripts": {
+    "tests": "mocha -r ts-node/register tests/**/*.test.ts",
+    "build": "tsc && cp -f typechain/*.d.ts build/typechain",
+    "watch": "tsc --watch"
+  }
+}
