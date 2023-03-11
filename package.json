@@ -7,6 +7,6 @@
   "scripts": {
     "tests": "mocha -r ts-node/register tests/**/*.test.ts",
     "build": "tsc && cp -f typechain/*.d.ts build/typechain",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch" 
   }
 }

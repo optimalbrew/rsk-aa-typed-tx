@@ -1,6 +1,7 @@
 import { EIP712Signer } from "../src/signer";
 import { TransactionRequest, Eip712Meta } from "../src/types"
 import { ethers } from "hardhat";
+//import { Wallet } from "ethers";
 
 async function main() {
     let tx: TransactionRequest;  //or just use ethers.Provider.TransactionRequest;
@@ -12,9 +13,9 @@ async function main() {
         chainId: (await ethers.provider.getNetwork()).chainId,
         nonce: await ethers.provider.getTransactionCount(user0.getAddress()),
         type: 113, //0x71
-        customData: {
-          customSignature: undefined,
-        } as Eip712Meta,
+        // customData: {
+        //   customSignature: undefined,
+        // } as Eip712Meta,
         value: 1,
         data:'0x',
       };
@@ -41,7 +42,11 @@ async function main() {
     console.log('The signed typed data digest is %s with length %d', signedDigest, (signedDigest.length -2));
 
     //todo ecrecover
-    
+    const txResp  = (await (await user0.sendTransaction(tx)).wait());
+
+    console.log(txResp);
+
+    //tx encoding  
 
 }
 

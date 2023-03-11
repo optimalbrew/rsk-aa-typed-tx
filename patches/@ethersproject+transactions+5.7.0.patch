@@ -1,0 +1,115 @@
+diff --git a/node_modules/@ethersproject/transactions/src.ts/index.ts b/node_modules/@ethersproject/transactions/src.ts/index.ts
+index 5dad727..f08b2a4 100644
+--- a/node_modules/@ethersproject/transactions/src.ts/index.ts
++++ b/node_modules/@ethersproject/transactions/src.ts/index.ts
+@@ -27,6 +27,7 @@ export enum TransactionTypes {
+     legacy = 0,
+     eip2930 = 1,
+     eip1559 = 2,
++    rskerc4337 = 3, // < 7f
+ };
+ 
+ export type UnsignedTransaction = {
+@@ -43,6 +44,10 @@ export type UnsignedTransaction = {
+     // Typed-Transaction features
+     type?: number | null;
+ 
++    //RSK erc4337 account abstraction
++    from?: string;
++    customSig?: string; 
++
+     // EIP-2930; Type 1 & EIP-1559; Type 2
+     accessList?: AccessListish;
+ 
+@@ -72,6 +77,11 @@ export interface Transaction {
+     // Typed-Transaction features
+     type?: number | null;
+ 
++    //RSK erc4337 account abstraction
++    //from?: string; already defined above
++    customSig?: string; 
++    
++
+     // EIP-2930; Type 1 & EIP-1559; Type 2
+     accessList?: AccessList;
+ 
+@@ -221,6 +231,26 @@ function _serializeEip2930(transaction: UnsignedTransaction, signature?: Signatu
+     return hexConcat([ "0x01", RLP.encode(fields)]);
+ }
+ 
++
++//rsk-erc4337 type "01" AA only. Use legacy for other
++function _serializeRskErc4337Type2(transaction: UnsignedTransaction): string {
++    const fields: any = [
++        //formatNumber(transaction.chainId || 0, "chainId"),
++        formatNumber(transaction.nonce || 0, "nonce"),
++        formatNumber(transaction.gasPrice || 0, "gasPrice"),
++        formatNumber(transaction.gasLimit || 0, "gasLimit"),
++        ((transaction.to != null) ? getAddress(transaction.to): "0x"),
++        formatNumber(transaction.value || 0, "value"),
++        (transaction.data || "0x"),
++    ];
++    fields.push(formatNumber(transaction.chainId || 0, "chainId"));
++    fields.push((transaction.from != null) ? getAddress(transaction.from): "0x");
++    fields.push(transaction.customSig || "0x");
++    
++    return hexConcat([ "0x01", RLP.encode(fields)]);
++}
++
++
+ // Legacy Transactions and EIP-155
+ function _serialize(transaction: UnsignedTransaction, signature?: SignatureLike): string {
+     checkProperties(transaction, allowedTransactionKeys);
+@@ -317,6 +347,8 @@ export function serialize(transaction: UnsignedTransaction, signature?: Signatur
+             return _serializeEip2930(transaction, signature);
+         case 2:
+             return _serializeEip1559(transaction, signature);
++        case 3:
++            return _serializeRskErc4337Type2(transaction);
+         default:
+             break;
+     }
+@@ -407,6 +439,34 @@ function _parseEip2930(payload: Uint8Array): Transaction {
+     return tx;
+ }
+ 
++function _parseRSKErc4337(payload: Uint8Array): Transaction {
++    const transaction = RLP.decode(payload.slice(1));
++
++    if (transaction.length !== 9) {
++        logger.throwArgumentError("invalid component count for transaction type: 3", "payload", hexlify(payload));
++    }
++
++    const tx: Transaction = {
++        type:       1,
++        chainId:    handleNumber(transaction[6]).toNumber(),
++        nonce:      handleNumber(transaction[0]).toNumber(),
++        gasPrice:   handleNumber(transaction[1]),
++        gasLimit:   handleNumber(transaction[2]),
++        to:         handleAddress(transaction[3]),
++        value:      handleNumber(transaction[4]),
++        data:       transaction[5],
++        v:          handleNumber(transaction[6]).toNumber(),
++        from:       handleAddress(transaction[7]),
++        customSig:  transaction[8],
++    };
++
++    tx.hash = keccak256(payload);
++
++    return tx;
++}
++
++
++
+ // Legacy Transactions and EIP-155
+ function _parse(rawTransaction: Uint8Array): Transaction {
+     const transaction = RLP.decode(rawTransaction);
+@@ -487,6 +547,8 @@ export function parse(rawTransaction: BytesLike): Transaction {
+             return _parseEip2930(payload);
+         case 2:
+             return _parseEip1559(payload);
++        case 3:
++            return _parseRSKErc4337(payload);
+         default:
+             break;
+     }
