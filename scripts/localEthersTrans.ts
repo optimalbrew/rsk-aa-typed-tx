@@ -449,7 +449,7 @@ function _parseRSKErc4337(payload: Uint8Array): Transaction {
     }
 
     const tx: Transaction = {
-        type:       1,
+        type:       3,
         chainId:    handleNumber(transaction[6]).toNumber(),
         nonce:      handleNumber(transaction[0]).toNumber(),
         gasPrice:   handleNumber(transaction[1]),
