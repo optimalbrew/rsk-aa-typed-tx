@@ -50,17 +50,6 @@ async function main() {
 
     //console.log("the resoonse from send base", sendTx);
 
-
-    //now the other way
-    /**
-     * curl http://localhost:4444     \
-     * -X POST -H "Content-Type: application/json"     \
-     * --data '{"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":["0x03f838808504a817c800825208947986b3df570230288501eea3d890bd66948c9b7901802194cd2a3d9f938e13cd947ec05abc7fe734df8dd82680"],"id":1}'
-     */
-
-    const getChainId = await ethers.provider.send("eth_chainId",[]);//send("eth_chainID", [])).wait();
-    console.log("the response from send Raw", getChainId);
-
     const sendRawTx = await (await ethers.provider.send("eth_sendRawTransaction", [serialized])).wait();
 
     console.log("the response from send Raw", sendRawTx);
