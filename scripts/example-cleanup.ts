@@ -2,6 +2,8 @@ import { BigNumber } from "ethers";
 import { ethers } from "hardhat";
 import { UnsignedTransaction, serialize, parse } from "./localEthersTrans";
 import { TransactionRequest } from "@ethersproject/abstract-provider";
+import { getContractAddress} from "@ethersproject/address";
+import { Wallet } from "../src";
 
 async function main() {
     const [_user0, user1] = await ethers.getSigners(); //on RSKJ regtest user0 is "cow" account, user1 is "cow1"
@@ -27,10 +29,34 @@ async function main() {
     txResp = await simpleLegacyTx(senderPvtKey, to, val, data);
     console.log(txResp);
 
-    /// 3. Todo() Install Code interaction via EOA mode (to be turned off later)
+    /// 3. Install Code interaction via EOA mode (to be turned off later)
+    /// 3A: deploy another contract and in 3B call it from AA account
 
-    /// 4. Todo() New typed transaction
+    const contractData = "0x6080806040526004361015601257600080fd5b60003560e01c63c298557814602657600080fd5b60007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc360112605957806103e760209252f35b600080fdfea26469706673582212206ca4c9c8b54e9fb98a2594de83034e716d3ca6f3da5718ea465373e9cf5555c864736f6c63430008110033";
 
+    to = "0x0000000000000000000000000000000000000000"; // deploy
+    val = 0;
+    data = contractData;
+
+    //get the deterministic address before deploying
+    let from = new ethers.Wallet(senderPvtKey).address;
+    let nonce = await ethers.provider.getTransactionCount(from); 
+
+    let deployedAddress = getContractAddress({from, nonce});
+    console.log("\nThe contract will be deployed at " + deployedAddress + " with nonce " + nonce);
+
+    txResp = await simpleLegacyTx(senderPvtKey, to, val, data);
+    console.log(txResp);
+
+    /// 3B Call the deployed contract. 
+    to = deployedAddress; //contract created above
+    val = 666;
+    data = "0xc2985578";
+
+    txResp = await simpleLegacyTx(senderPvtKey, to, val, data);
+    console.log(txResp);
+
+    console.log("Deployed contract has value: " + await ethers.provider.getBalance(deployedAddress));
 
 
     // let tx: UnsignedTransaction;
