@@ -5,9 +5,10 @@ import { BigNumber, BigNumberish } from "@ethersproject/bignumber";
 import { arrayify, BytesLike, DataOptions, hexConcat, hexDataLength, hexDataSlice, hexlify, hexZeroPad, isBytesLike, SignatureLike, splitSignature, stripZeros, } from "@ethersproject/bytes";
 import { Zero } from "@ethersproject/constants";
 import { keccak256 } from "@ethersproject/keccak256";
-import { checkProperties } from "@ethersproject/properties";
+import { checkProperties, resolveProperties } from "@ethersproject/properties";
 import * as RLP from "@ethersproject/rlp";
 import { computePublicKey, recoverPublicKey } from "@ethersproject/signing-key";
+import { TransactionRequest } from "@ethersproject/abstract-provider";
 
 import { Logger } from "@ethersproject/logger";
 
@@ -34,7 +35,7 @@ export enum TransactionTypes {
 
 export type UnsignedTransaction = {
     to?: string;
-    nonce?: number;
+    nonce?: BigNumberish;//number; //original number
 
     gasLimit?: BigNumberish;
     gasPrice?: BigNumberish;
@@ -48,7 +49,7 @@ export type UnsignedTransaction = {
 
     //RSK erc4337 account abstraction
     from?: string;
-    customSig?: string; 
+    customData?: Record<string, BytesLike>;  //{"customSig", "0xdeadbeef"} for example
 
     // EIP-2930; Type 1 & EIP-1559; Type 2
     accessList?: AccessListish;
@@ -81,7 +82,7 @@ export interface Transaction {
 
     //RSK erc4337 account abstraction
     //from?: string; already defined above
-    customSig?: string; 
+    customData?: Record<string, any>; 
     
 
     // EIP-2930; Type 1 & EIP-1559; Type 2
@@ -234,8 +235,15 @@ function _serializeEip2930(transaction: UnsignedTransaction, signature?: Signatu
 }
 
 
-//rsk-erc4337 type "01" AA only. Use legacy for other
-function _serializeRskErc4337Type2(transaction: UnsignedTransaction): string {
+/// encode without CustomSignature
+export function encode4337withoutCustomSig(transaction: UnsignedTransaction): string {
+    transaction.customData = "0x";
+    return _serializeRskErc4337Type(transaction);
+}
+
+
+//rsk-erc4337
+function _serializeRskErc4337Type(transaction: UnsignedTransaction): string {
     const fields: any = [
         //formatNumber(transaction.chainId || 0, "chainId"),
         formatNumber(transaction.nonce || 0, "nonce"),
@@ -247,7 +255,8 @@ function _serializeRskErc4337Type2(transaction: UnsignedTransaction): string {
     ];
     fields.push(formatNumber(transaction.chainId || 0, "chainId"));
     fields.push((transaction.from != null) ? getAddress(transaction.from): "0x");
-    fields.push(transaction.customSig || "0x");
+    let custSigBytes = transaction.customData.customSig;
+    fields.push( custSigBytes || "0x");
     
     return hexConcat([ "0x03", RLP.encode(fields)]);
 }
@@ -350,7 +359,7 @@ export function serialize(transaction: UnsignedTransaction, signature?: Signatur
         case 2:
             return _serializeEip1559(transaction, signature);
         case 3:
-            return _serializeRskErc4337Type2(transaction);
+            return _serializeRskErc4337Type(transaction);
         default:
             break;
     }
@@ -447,7 +456,7 @@ function _parseRSKErc4337(payload: Uint8Array): Transaction {
     if (transaction.length !== 9) {
         logger.throwArgumentError("invalid component count for transaction type: 3", "payload", hexlify(payload));
     }
-
+    
     const tx: Transaction = {
         type:       3,
         chainId:    handleNumber(transaction[6]).toNumber(),
@@ -459,7 +468,7 @@ function _parseRSKErc4337(payload: Uint8Array): Transaction {
         data:       transaction[5],
         v:          handleNumber(transaction[6]).toNumber(),
         from:       handleAddress(transaction[7]),
-        customSig:  transaction[8],
+        customData:  { name: "customSig", any: transaction[8] },
     };
 
     tx.hash = keccak256(payload);
@@ -560,4 +569,15 @@ export function parse(rawTransaction: BytesLike): Transaction {
         transactionType: payload[0]
     });
 }
+
+/// Modified from wallet.signTransaction()
+/// convert transaction request to unsigned transaction for serialization
+export async function serializeTR(transaction: TransactionRequest): Promise<string> {
+        return resolveProperties(transaction).then((tx) => {
+            //const signature = this._signingKey().signDigest(keccak256(serialize(<UnsignedTransaction>tx)));
+            return serialize(<UnsignedTransaction>tx);
+        });    
+}
+
+
 
