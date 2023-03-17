@@ -1,16 +1,65 @@
 import { ethers } from "hardhat";
 import { UnsignedTransaction, serialize, parse } from "./localEthersTrans";
+import { TransactionRequest } from '@ethersproject/providers';
+import * as fs from 'fs';
+import { join } from 'path';
 
 /**adding fields to transaction does not work. we get serialization errors. */
 
 async function main() {
+    console.log('Start.');
 
     const [user0, user1] = await ethers.getSigners();
-    //const bal0 = await user0.getBalance();
-    //const bal1 = await user1.getBalance();
-    
-    //console.log("The users balances are", bal0 , bal1);
+    const bal0 = await user0.getBalance();
+    const bal1 = await user1.getBalance();
+    console.log('user0', bal0);
+    console.log('user1', bal1);
 
+    const bytecode = fs.readFileSync(join(__dirname, './wallet.bytecode'), 'utf-8');
+
+    console.log('bytecode:', bytecode);
+    let nonce = ethers.utils.hexZeroPad(
+                        ethers.utils.hexlify(
+                            await ethers.provider.getTransactionCount(user0.getAddress()) + 1
+                        )
+                , 32).replace('0x', '');
+    let address = ethers.utils.hexZeroPad(
+                            (await user0.getAddress())
+                , 32).replace('0x', '').toLowerCase();
+    let bytecodeHash = ethers.utils.keccak256(ethers.utils.hexlify('0x' + bytecode)).replace('0x', '');
+    let msgToSign = '0x' + address + nonce + bytecodeHash;
+   // console.log('msgToSign', msgToSign);
+    let msgHashToSign = ethers.utils.keccak256(ethers.utils.hexlify( msgToSign ));
+    //console.log('msgHashToSign', msgHashToSign);
+    let bytecodeSignature = (await user0.signMessage(ethers.utils.arrayify(msgHashToSign))).replace('0x', '');
+    //console.log('bytecodeSignature', bytecodeSignature);
+    //console.log('v:', '0x' + bytecodeSignature.slice(128));
+    let v = ethers.utils.hexZeroPad(
+                        ethers.utils.hexlify(
+                            '0x' + bytecodeSignature.slice(128)
+                        )
+                , 32).replace('0x', '');
+    bytecodeSignature = v + bytecodeSignature.slice(0, 128);
+    //console.log('bytecodeSignature', bytecodeSignature);
+    let data = '0x'+address+bytecodeSignature + bytecode;
+    //console.log('data', data);
+    let txInstall: TransactionRequest = {
+        ///...tx,`
+        to: '0x0000000000000000000000000000000001000011',
+        from: (await user0.getAddress()),
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        nonce: await ethers.provider.getTransactionCount(user0.getAddress()),
+        value: 1,
+        data: data,
+        gasPrice: 1,
+        gasLimit: 500000, 
+    };
+    if ( txInstall.gasLimit == undefined) {
+        //txInstall.gasLimit = await ethers.provider.estimateGas(txInstall)
+    }
+    let txResult = await (await user0.sendTransaction(txInstall)).wait();
+    //console.log("InstallCode result", txResult);
+    
     let tx: UnsignedTransaction;
 
     tx = {
@@ -20,8 +69,8 @@ async function main() {
         chainId: (await ethers.provider.getNetwork()).chainId,
         nonce: await ethers.provider.getTransactionCount(user0.getAddress()),
         type: 3, //<0x7f, using 1, which can conflict with eip2920 Todo(shree) change later
-        value: 1,
-        data: '0x',
+        value: 6666,
+        //data: '0x',
         gasPrice: 1,
         gasLimit: 40000, 
     };
@@ -30,19 +79,19 @@ async function main() {
     if ( tx.gasLimit == undefined) {
         tx.gasLimit = await ethers.provider.estimateGas(tx)
     }
-    console.log("The unsigned transaction object", tx);
+    //console.log("The unsigned transaction object", tx);
     let serialized = serialize(tx);
 
-    console.log("The serialized tx: \n", serialized);
+    //console.log("The serialized tx: \n", serialized);
 
     let txParsed = parse(serialized);
-    console.log("parsed tx with new fields", txParsed);
+    //console.log("parsed tx with new fields", txParsed);
 
 
     //transaction hash (already present iabove, but just for kicks)
     // see https://github.com/ethers-io/ethers.js/issues/1229
     const txHash = ethers.utils.keccak256(serialized);
-    console.log("the computed hash is: ", txHash);  //same as above
+    //console.log("the computed hash is: ", txHash);  //same as above
 
     //try sending serialized tx -- it is unsigned and should fail.
     // fails because ethers cannot parse it (actual libary unchanged, not patched)
@@ -59,9 +108,9 @@ async function main() {
      */
 
     const getChainId = await ethers.provider.send("eth_chainId",[]);//send("eth_chainID", [])).wait();
-    console.log("the response from send Raw", getChainId);
+    //console.log("the response from send Raw", getChainId);
 
-    const sendRawTx = await (await ethers.provider.send("eth_sendRawTransaction", [serialized])).wait();
+    const sendRawTx = (await ethers.provider.send("eth_sendRawTransaction", [serialized]));
 
     console.log("the response from send Raw", sendRawTx);
 }
