@@ -5,10 +5,10 @@ pragma solidity ^0.8.9;
 // import "hardhat/console.sol";
 
 contract Bar {
-    uint public unlockTime = 2;
-    bool public initialized = true;
-
-    function state() public payable returns (uint) {
-       return unlockTime;
+    uint256 public unlockTime;
+    bool public initialized;
+    
+    function state() public payable returns (uint256) {
+       return unlockTime + 10;
     } 
 }

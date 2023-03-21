@@ -18,15 +18,24 @@ async function main() {
     // console.log('user1', bal1);
 
     // for methods that require explicit signature (e.g. signTransaction), need a signer with pvt key
-    const senderKey = pvtKeyfromSeed("cow");
-    const rskUser = new ethers.Wallet(senderKey, ethers.provider);
-    //console.log(rskUser.address); //should match user0
+    //send installcode tx from this account
+    const senderKey0 = pvtKeyfromSeed("cow");
+    const rskUser0 = new ethers.Wallet(senderKey0, ethers.provider);
+    console.log("user0: ", rskUser0.address); //should match user1
+
+    //but install into this account to avoid nonce error
+    const senderKey1 = pvtKeyfromSeed("cow1");
+    const rskUser1 = new ethers.Wallet(senderKey1, ethers.provider);
+    console.log("user1: :", rskUser1.address); //should match user1
 
     
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     console.log("Install Bar.sol in user-0's EOA address using install code. Test by calling a simple method");
+    console.log("To avoid nonce error, send install code TX from user-1 account");
     // the same Bar.sol contract for testing if installcode is actually callable
     const bytecode = fs.readFileSync(join(__dirname, './barDeployedCode.txt'), 'utf-8');
+    //same as above, just pasted directly
+    //const bytecode2 = "60806040526004361060305760003560e01c8063158ef93e146035578063251c1aa3146062578063c19d93fb146083575b600080fd5b348015604057600080fd5b50600154604d9060ff1681565b60405190151581526020015b60405180910390f35b348015606d57600080fd5b50607660005481565b6040519081526020016059565b600054607656fea26469706673582212207fdf6a17e49468e2ed8a66abff9362d3dbc180c4c49143131355cf2112bcd81864736f6c634300080a0033";
     
     /// The wallet bytecode we actually want to install
     //const bytecode = fs.readFileSync(join(__dirname, './wallet.bytecode'), 'utf-8');
@@ -34,11 +43,11 @@ async function main() {
     //console.log('bytecode:', bytecode);
     let nonce = ethers.utils.hexZeroPad(
                         ethers.utils.hexlify(
-                            await ethers.provider.getTransactionCount(user0.getAddress()) + 1
+                            await ethers.provider.getTransactionCount(rskUser0.getAddress()) //+ 1 //remove the increment when sending from different account
                         )
                 , 32).replace('0x', '');
     let address = ethers.utils.hexZeroPad(
-                            (await user0.getAddress())
+                            (await rskUser0.getAddress())
                 , 32).replace('0x', '').toLowerCase();
     let bytecodeHash = ethers.utils.keccak256(ethers.utils.hexlify('0x' + bytecode)).replace('0x', '');
     let msgToSign = '0x' + address + nonce + bytecodeHash;
@@ -46,7 +55,8 @@ async function main() {
     let msgHashToSign = ethers.utils.keccak256(ethers.utils.hexlify( msgToSign ));
     //console.log('msgHashToSign', msgHashToSign);
     
-    let bytecodeSignature = (await rskUser.signMessage(ethers.utils.arrayify(msgHashToSign))).replace('0x', '');
+    //to prove ownership, user-0 must sign the message
+    let bytecodeSignature = (await rskUser0.signMessage(ethers.utils.arrayify(msgHashToSign))).replace('0x', '');
     //console.log('bytecodeSignature', bytecodeSignature);
     //console.log('v:', '0x' + bytecodeSignature.slice(128));
     let v = ethers.utils.hexZeroPad(
@@ -61,9 +71,9 @@ async function main() {
     let txInstall: TransactionRequest = {
         ///...tx,`
         to: '0x0000000000000000000000000000000001000011',
-        from: (await rskUser.getAddress()),
+        from: (await rskUser1.getAddress()),
         chainId: (await ethers.provider.getNetwork()).chainId,
-        nonce: await ethers.provider.getTransactionCount(rskUser.getAddress()),
+        nonce: await ethers.provider.getTransactionCount(rskUser1.getAddress()),
         value: 1,
         data: data,
         gasPrice: 1,
@@ -72,12 +82,21 @@ async function main() {
     // if ( txInstall.gasLimit == undefined) {
     //     //txInstall.gasLimit = await ethers.provider.estimateGas(txInstall)
     // }
-    let txResult = await (await user0.sendTransaction(txInstall)).wait();
+    let txResult = await (await rskUser1.sendTransaction(txInstall)).wait();
     //console.log("InstallCode result", txResult);
     
     // this is not wallet code, this is Bar.sol deployed via installcode!!
-    let ICbarRes = await callBar(rskUser.address, "state()");
-    console.log("\nResponse from installed code is not as expected (should return 2). Returns nothing -> ", ICbarRes); //should return 2 in hexstring, but it does not
+    let ICbarRes = await callBar(user0.address, "state()");
+    console.log("\nCall result Installed Code :  ", ICbarRes); //should return 2 in hexstring, but it does not
+
+    console.log("check for code in the account")
+    let code = await ethers.provider.getCode(user0.address);
+    //check recovered code is the same
+    //console.log(code);
+    console.log("Verify deployed code is as expected:",code==='0x'+ bytecode);
+ 
+
+
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     /**
@@ -91,14 +110,14 @@ async function main() {
     
     let tx: UnsignedTransaction;
 
-    let nonceUser2 = await ethers.provider.getTransactionCount(user1.getAddress());
+    let nonceUser1 = await ethers.provider.getTransactionCount(user1.getAddress());
 
     tx = {
         ///...tx,`
         //to: , //leave undefined for contract creation
         //from: , // not needed, using default sender
         chainId: (await ethers.provider.getNetwork()).chainId,
-        nonce: nonceUser2,
+        nonce: nonceUser1,
         //type: 3, //<0x7f, using 1, which can conflict with eip2920 Todo(shree) change later
         value: 0,
         data: '0x' + barBytecode,
@@ -106,14 +125,23 @@ async function main() {
         gasLimit: 2000_000, 
     };
 
-    let deployedAddress = getContractAddress({from: user1.address, nonce: nonceUser2 });
+    let deployedAddress = getContractAddress({from: user1.address, nonce: nonceUser1 });
     console.log("\nBar to be deployed at: ", deployedAddress);
     //deploy it
     const sendDeployTx = await user1.sendTransaction(tx);
 
     // Call it to check it deployed correctly: "initialized()"", "state()"", and "unlockTime()"
     let barRes = await callBar(deployedAddress, "state()");
-    console.log("This is what we expect from installed code too: ", barRes);
+    console.log("Call result regular contract: ", barRes);
+
+    //console.log("Check the deployed code as before");
+    //let code2 = await ethers.provider.getCode(deployedAddress);
+    //check recovered code is the same
+    //console.log(code2);
+    //are both installations identical? why does one behave differently if there is no constructor?
+    //console.log(code===code2);
+
+    
 
 
 
@@ -240,13 +268,12 @@ async function main() {
 
     // call Bar.sol
     // avail function names //two default getters initialized() and "unlockTime()" and one function "state()"
- 
     async function callBar(barAddr: string,  func:string): Promise<string> {
         let funcSel =  ethers.utils.keccak256(ethers.utils.toUtf8Bytes(func)).substring(0,10);
         let tx: UnsignedTransaction;  
      
         tx = {
-          to : barAddr,//bar.address, /deploy it first
+          to : barAddr,
           value : 0,
           data : funcSel,
           gasPrice : 1,

@@ -1,16 +1,22 @@
-# Sample Hardhat Project
+# Sample Install Code
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+Install Code example with simple contract example. We install the same code two ways. 
+Once with installcode with `deployedBytecode`and again in the usual manner. 
+Then we check that the code behaves the same when called from outside.
 
-Try running some of the following tasks:
+Run the example with a RSKJ node (regtest mode) that has the installcode precompiled
+ contract implemented, such as the `AA-poc` [branch](https://github.com/rsksmart/rskj/tree/AA-poc)
 
 ```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
+npx hardhat run scripts/ex-encode.ts --network localhost
 ```
 
-## zksync-web3
-Initial eip712 signer code from npm `zksync-web3` 
+The above example illustrates injecting code into an EOA account using a TX sent from 
+a different EOA account. This keeps the two EOA account nonces separate for clarity. The
+nonce for the EOA account where code is to installed must be known in advance, and this 
+is used as part of a signed message to indicate that the EOA owner approves the addition
+of code, which makes the account state `smart` - which indicates a new accounttype 
+that is both an EOA and a contract. 
+
+The goal of installcode is not to inject arbitrary code. Rather, the code is expected to 
+be a smart contract wallet, leading to a native version of account abstraction.
