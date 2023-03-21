@@ -86,8 +86,11 @@ async function main() {
     //console.log("InstallCode result", txResult);
     
     // this is not wallet code, this is Bar.sol deployed via installcode!!
+    let ICbarResVar = await callBar(user0.address, "unlockTime()");
+    console.log("\nCall result for `unlockTime()` using Installed Code (variables not initialized, default values) :  ", ICbarResVar);
+    
     let ICbarRes = await callBar(user0.address, "state()");
-    console.log("\nCall result Installed Code :  ", ICbarRes); //should return 2 in hexstring, but it does not
+    console.log("\nCall result for `state()` using Installed Code:  ", ICbarRes);
 
     console.log("check for code in the account")
     let code = await ethers.provider.getCode(user0.address);
@@ -131,8 +134,11 @@ async function main() {
     const sendDeployTx = await user1.sendTransaction(tx);
 
     // Call it to check it deployed correctly: "initialized()"", "state()"", and "unlockTime()"
+    let ICbarResVar2 = await callBar(deployedAddress, "unlockTime()");
+    console.log("\nCall result for `unlockTime()` using regular contract deployment (variables get initialized) :  ", ICbarResVar2);
+    
     let barRes = await callBar(deployedAddress, "state()");
-    console.log("Call result regular contract: ", barRes);
+    console.log("Call result for `state()` regular contract, higher because of initialized value: ", barRes);
 
     //console.log("Check the deployed code as before");
     //let code2 = await ethers.provider.getCode(deployedAddress);
